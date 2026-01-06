@@ -33,7 +33,17 @@ Based on the implementation in `Program.cs`, the application does not interact w
 
 * **Red Hat build of MicroShift 4.20+**.
 * **Generic Device Plugin Enabled**: Configured in `/etc/microshift/config.yaml`.
-* **Host-level Permissions**: A `udev` rule on the host granting access to the TPM device for the container's user ID (e.g., `1001`).
+
+~~~
+genericDevicePlugin:
+  status: Enabled
+  domain: device.microshift.io
+  devices:
+   - name: host-tpm
+     groups:
+      - paths:
+         - path: /dev/tpmrm0
+~~~
 
 ---
 
