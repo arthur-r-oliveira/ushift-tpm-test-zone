@@ -4,7 +4,7 @@ A proof-of-concept (PoC) demonstrating secure, non-privileged access to a Hardwa
 
 ## Overview
 
-This project addresses a critical security requirement: allowing containerized applications (specifically .NET/C#) to interact with a TPM for cryptographic operations (e.g., generating random numbers, CSRs, or TLS keys) without requiring the container to run as `root` or with `privileged: true`.
+This project addresses a critical security requirement: allowing containerized applications (specifically .NET/C#) to interact with a TPM for cryptographic operations without requiring the container to run as `root` or with `privileged: true`.
 
 ### Key Achievements
 
@@ -14,13 +14,18 @@ This project addresses a critical security requirement: allowing containerized a
 
 ---
 
-## Architecture
+## Architecture & Hardware Access Mechanism
 
-The solution relies on three distinct layers of security and orchestration:
+The solution bridges the gap between the host hardware and an unprivileged container through several layers of abstraction:
 
-1. **MicroShift GDP**: Advertises the host TPM as a schedulable resource (`device.microshift.io/host-tpm`).
-2. **Namespace Policy**: Enforces the `restricted` security profile via standard labels.
-3. **App Runtime**: A .NET 8.0 application utilizing `tpm2-tools` to interact with the TPM resource manager.
+### How the TPM is Accessed
+
+Based on the implementation in `Program.cs`, the application does not interact with the character device directly via C# file streams. Instead, it uses **Process Delegation**:
+
+1. **Process Invocation**: The .NET runtime spawns the `tpm2_getrandom` binary from the standard `tpm2-tools` suite.
+2. **TCTI Layer**: The `tpm2-tools` utilize the **TPM Command Transmission Interface (TCTI)** to locate the in-kernel resource manager at `/dev/tpmrm0`.
+3. **GDP Mapping**: The **Generic Device Plugin (GDP)** ensures that `/dev/tpmrm0` is available at the correct path inside the pod's filesystem with the necessary cgroup permissions, despite the pod being unprivileged.
+4. **Output Capture**: The .NET application redirects the standard output of the tool to consume the cryptographic results.
 
 ---
 
@@ -28,18 +33,18 @@ The solution relies on three distinct layers of security and orchestration:
 
 * **Red Hat build of MicroShift 4.20+**.
 * **Generic Device Plugin Enabled**: Configured in `/etc/microshift/config.yaml`.
-* **Host-level Permissions**: A `udev` rule on the host granting access to the TPM device for the container's group/user ID (e.g., `1001`).
+* **Host-level Permissions**: A `udev` rule on the host granting access to the TPM device for the container's user ID (e.g., `1001`).
 
 ---
 
 ## Repository Structure
 
-* `Program.cs`: .NET 8 source code that attempts to read random bytes from the TPM.
-* `Containerfile`: Builds a UBI 9-based image containing the .NET runtime and `tpm2-tools`.
+* `Program.cs`: .NET 8 source code using `ProcessStartInfo` to delegate commands to TPM tools.
+* `Containerfile`: Builds a UBI 9 image containing the .NET SDK 8.0 and `tpm2-tools`.
 * `k8s/`:
 * `namespace.yaml`: Defines the `tpm-test-zone` with restricted PSA labels.
-* `pod-tpm.yaml`: The pod manifest requesting the `host-tpm` resource.
-* `kustomization.yaml`: Orchestrates the deployment.
+* `pod-tpm.yaml`: The pod manifest requesting the `host-tpm` resource and dropping all capabilities.
+* `kustomization.yaml`: Orchestrates the deployment using the modern `labels` syntax.
 
 
 
@@ -63,20 +68,18 @@ oc apply -k k8s/
 
 ### 3. Verify Results
 
-Check the logs to confirm the TPM was accessed successfully:
-
 ```bash
 oc logs -n tpm-test-zone tpm-test-app
 
 ```
 
-**Expected Output:**
+**Successful Output Example:**
 
 ```text
 --- TPM Access Test Application ---
 [SUCCESS] Found TPM Resource Manager at /dev/tpmrm0
 Requesting 16 random bytes from hardware TPM...
-[SUCCESS] TPM Data: <hex-string>
+[SUCCESS] TPM Data: e8d51eb798087253e5098e43653c4707
 
 ```
 
@@ -84,4 +87,5 @@ Requesting 16 random bytes from hardware TPM...
 
 ## Support Status
 
-This implementation uses the **Generic Device Plugin**, which is currently a **Technology Preview** feature in Red Hat build of MicroShift 4.20. At the time of this writting, it is intended for evaluation and development purposes and is not yet recommended for production workloads. 
+The **Generic Device Plugin** is a **Technology Preview** feature in Red Hat build of MicroShift. While it successfully enables unprivileged TPM access, it is not yet intended for production Service Level Agreements (SLAs).
+
