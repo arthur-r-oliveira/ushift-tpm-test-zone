@@ -45,6 +45,18 @@ genericDevicePlugin:
          - path: /dev/tpmrm0
 ~~~
 
+Check the host: 
+
+~~~
+[root@ushift05 tpm]# oc describe node ushift05.stormshift.coe.muc.redhat.com|grep -A 4 Allocatable
+Allocatable:
+  cpu:                            4
+  device.microshift.io/host-tpm:  1
+  ephemeral-storage:              77814Mi
+  hugepages-1Gi:                  0
+
+~~~ 
+
 ---
 
 ## Repository Structure
