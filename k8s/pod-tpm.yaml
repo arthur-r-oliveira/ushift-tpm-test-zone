@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tpm-test-app
+  labels:
+    app: tpm-test
+spec:
+  containers:
+  - name: dotnet-tpm-tester
+    image: quay.io/rhn_support_arolivei/ushift-tpm:v1
+    securityContext:
+      # Mandatory for 'restricted' PSA
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1001
+      # Drop all capabilities
+      capabilities:
+        drop:
+          - ALL
+      # Set Seccomp profile
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      limits:
+        device.microshift.io/host-tpm: 1
+  restartPolicy: Never
